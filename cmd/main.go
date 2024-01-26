@@ -7,6 +7,7 @@ import (
 
 	"github.com/SawitProRecruitment/UserService/generated"
 	"github.com/SawitProRecruitment/UserService/handler"
+	"github.com/SawitProRecruitment/UserService/middleware"
 	"github.com/SawitProRecruitment/UserService/pkg/hash"
 	"github.com/SawitProRecruitment/UserService/pkg/token"
 	"github.com/SawitProRecruitment/UserService/repository"
@@ -16,48 +17,82 @@ import (
 
 func main() {
 	e := echo.New()
-	var server generated.ServerInterface = newServer()
+	server := newServer()
 	e.Logger.SetLevel(log.DEBUG)
-	generated.RegisterHandlers(e, server)
-	// Middleware: Logger
-	e.Use(middlewareLogger)
+	e.Use(server.middleware.MiddlewareLogger)
+	generated.RegisterHandlers(e, server.handler)
 	e.Logger.Fatal(e.Start(":1323"))
 }
 
-func middlewareLogger(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		// Custom log message
-		fmt.Println("Request received:", c.Request().Method, c.Request().URL.Path)
-
-		// Call the next middleware or handler
-		return next(c)
-	}
+type Server struct {
+	handler    *handler.Server
+	middleware *middleware.Server
+	repository repository.RepositoryInterface
+	hash       hash.HashMethod
+	token      token.TokenMethod
 }
 
-func newServer() *handler.Server {
-	dbDsn := os.Getenv("DATABASE_URL")
-	if dbDsn == "" {
-		dbDsn = "postgres://postgres:postgres@localhost:5432/database?sslmode=disable"
+func newServer() Server {
+	s := Server{}
+
+	// Init Repo
+	{
+		dbDsn := os.Getenv("DATABASE_URL")
+		if dbDsn == "" {
+			dbDsn = "postgres://postgres:postgres@localhost:5432/database?sslmode=disable"
+		}
+		s.repository = repository.NewRepository(repository.NewRepositoryOptions{
+			Dsn: dbDsn,
+		})
+		fmt.Println("INIT REPO")
 	}
-	var repo repository.RepositoryInterface = repository.NewRepository(repository.NewRepositoryOptions{
-		Dsn: dbDsn,
-	})
 
-	cost := os.Getenv("HASH_COST")
-	costInt, err := strconv.Atoi(cost)
-	if cost == "" || err != nil || costInt < 4 || costInt > 31 {
-		costInt = 10
+	// Init Hash
+	{
+		cost := os.Getenv("HASH_COST")
+		costInt, err := strconv.Atoi(cost)
+		if cost == "" || err != nil || costInt < 4 || costInt > 31 {
+			costInt = 10
+		}
+
+		s.hash = hash.NewHashMethod(costInt)
+		fmt.Println("INIT HASH")
 	}
 
-	var hashMethod hash.HashMethod = hash.NewHashMethod(costInt)
-
-	secret := os.Getenv("TOKEN_SECRET")
-	var tokenMethod token.TokenMethod = token.NewTokenMethod(secret, 24)
-
-	opts := handler.NewServerOptions{
-		Repository: repo,
-		Hash:       hashMethod,
-		Token:      tokenMethod,
+	// Init Token
+	{
+		privateLocation := "./config/private_key.pem"
+		publicLocation := "./config/public_key.pem"
+		method, err := token.NewTokenMethod(
+			token.NewTokenConfig{
+				PrivateKeyLocation: privateLocation,
+				PublicKeyLocation:  publicLocation,
+				ExpinHour:          24,
+			})
+		if err != nil {
+			panic(err)
+		}
+		s.token = method
+		fmt.Println("INIT TOKEN")
 	}
-	return handler.NewServer(opts)
+
+	// Init Middleware
+	{
+		s.middleware = middleware.NewMiddlewareServer(middleware.NewMiddlewareOptions{
+			Token: s.token,
+		})
+		fmt.Println("INIT MIDDLEWARE")
+	}
+
+	// Init Handler
+	{
+		s.handler = handler.NewServer(handler.NewServerOptions{
+			Repository: s.repository,
+			Hash:       s.hash,
+			Token:      s.token,
+		})
+		fmt.Println("INIT HANDLER")
+	}
+
+	return s
 }

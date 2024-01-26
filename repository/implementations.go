@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"time"
 )
 
 func (r *Repository) RegisterUser(ctx context.Context, input RegisterUserInput) (output RegisterUserOutput, err error) {
@@ -17,9 +19,12 @@ func (r *Repository) RegisterUser(ctx context.Context, input RegisterUserInput) 
 		}
 	}()
 
+	createdTime := time.Now().UTC()
+
 	// Menambahkan user baru.
 	var userID int
-	err = tx.QueryRow("INSERT INTO users (phone_number, password, full_name) VALUES ($1, $2, $3) RETURNING id", input.PhoneNumber, input.Password, input.FullName).Scan(&userID)
+	err = tx.QueryRow("INSERT INTO users(phone_number, full_name, password, created_at) VALUES($1, $2, $3, $4) RETURNING id",
+		input.PhoneNumber, input.FullName, input.Password, createdTime).Scan(&userID)
 	if err != nil {
 		return RegisterUserOutput{}, err
 	}
@@ -36,7 +41,6 @@ func (r *Repository) RegisterUser(ctx context.Context, input RegisterUserInput) 
 
 func (r *Repository) LoginUser(ctx context.Context, input LoginUserInput) (output LoginUserOutput, err error) {
 	row := r.Db.QueryRow("SELECT id, phone_number, password FROM users WHERE phone_number = $1", input.PhoneNumber)
-
 	err = row.Scan(&output.UserID, &output.PhoneNumber, &output.Password)
 	if err != nil {
 		return LoginUserOutput{}, err
@@ -92,8 +96,9 @@ func (r *Repository) UpdateUser(ctx context.Context, input UpdateUserInput) (out
 		userInfo.FullName = input.FullName
 	}
 
+	updatedAt := time.Now().UTC()
 	// Update user.
-	_, err = tx.Exec("UPDATE users SET phone_number = $1, full_name = $2, password = $3 WHERE id = $4", userInfo.PhoneNumber, userInfo.FullName, userInfo.Password, userInfo.UserID)
+	_, err = tx.Exec("UPDATE users SET phone_number = $1, full_name = $2, password = $3, updated_at = $4 WHERE id = $5", userInfo.PhoneNumber, userInfo.FullName, userInfo.Password, updatedAt, userInfo.UserID)
 	if err != nil {
 		return UpdateUserOutput{}, err
 	}
@@ -109,4 +114,24 @@ func (r *Repository) UpdateUser(ctx context.Context, input UpdateUserInput) (out
 		PhoneNumber: userInfo.PhoneNumber,
 		FullName:    userInfo.FullName,
 	}, nil
+}
+
+func (r *Repository) IncrementLoginCount(ctx context.Context, userID int) (err error) {
+	createdTime := time.Now().UTC()
+
+	// Check if the user already has a login entry
+	var existingLoginCount int
+	err = r.Db.QueryRow("SELECT login_count FROM users_login_history WHERE user_id = $1", userID).Scan(&existingLoginCount)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+
+	// If the user has an existing login entry, update the login_count; otherwise, insert a new entry
+	if err == nil {
+		_, err = r.Db.Exec("UPDATE users_login_history SET login_count = login_count + 1 WHERE user_id = $1 RETURNING login_count", userID)
+	} else {
+		_, err = r.Db.Exec("INSERT INTO users_login_history(user_id, created_at) VALUES($1, $2)", userID, createdTime)
+	}
+
+	return err
 }

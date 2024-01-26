@@ -16,30 +16,30 @@ type LoginUserInput struct {
 }
 
 type LoginUserOutput struct {
-	UserID      uint
+	UserID      int
 	PhoneNumber string
 	Password    string
 }
 
 type GetUserInput struct {
-	UserID uint
+	UserID int
 }
 
 type GetUserOutput struct {
-	UserID      uint
+	UserID      int
 	PhoneNumber string
 	FullName    string
 }
 
 type UpdateUserInput struct {
-	UserID      uint
+	UserID      int
 	PhoneNumber string
 	FullName    string
 	Password    string
 }
 
 type UpdateUserOutput struct {
-	UserID      uint
+	UserID      int
 	PhoneNumber string
 	FullName    string
 	Password    string

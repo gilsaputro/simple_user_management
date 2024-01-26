@@ -11,4 +11,5 @@ type RepositoryInterface interface {
 	LoginUser(ctx context.Context, req LoginUserInput) (LoginUserOutput, error)
 	GetUser(ctx context.Context, req GetUserInput) (GetUserOutput, error)
 	UpdateUser(ctx context.Context, req UpdateUserInput) (UpdateUserOutput, error)
+	IncrementLoginCount(ctx context.Context, userID int) (err error)
 }
