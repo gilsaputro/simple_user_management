@@ -11,33 +11,28 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// This is just a test endpoint to get you started. Please delete this endpoint.
-// (GET /hello)
-func (s *Server) Hello(ctx echo.Context, params generated.HelloParams) error {
-	fmt.Println("TEST")
-	var resp generated.HelloResponse
-	resp.Message = fmt.Sprintf("Hello User %d", params.Id)
-	return ctx.JSON(http.StatusOK, resp)
-}
-
 func (s *Server) RegisterUser(ctx echo.Context) error {
 	var resp generated.RegisterResponse
 	var req = generated.RegisterRequest{}
+	var err error
 	ctx.Bind(&req)
-
-	err := validateRegisterRequest(req)
+	err = validateRegisterRequest(req)
 	if err != nil {
 		return ctx.JSON(http.StatusBadRequest, generated.ErrorResponse{
 			Message: err.Error(),
 		})
 	}
 
-	hashPassword, err := s.Hash.HashValue(req.Password)
+	var hashPassword []byte
+	hashPassword, err = s.Hash.HashValue(req.Password)
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, err)
+		return ctx.JSON(http.StatusInternalServerError, generated.ErrorResponse{
+			Message: err.Error(),
+		})
 	}
 
-	result, err := s.Repository.RegisterUser(ctx.Request().Context(), repository.RegisterUserInput{
+	var result repository.RegisterUserOutput
+	result, err = s.Repository.RegisterUser(ctx.Request().Context(), repository.RegisterUserInput{
 		FullName:    req.FullName,
 		Password:    string(hashPassword),
 		PhoneNumber: req.PhoneNumber,
@@ -45,11 +40,13 @@ func (s *Server) RegisterUser(ctx echo.Context) error {
 
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
-			return ctx.JSON(http.StatusBadRequest, generated.ErrorResponse{
+			return ctx.JSON(http.StatusConflict, generated.ErrorResponse{
 				Message: "Phone number already registered",
 			})
 		}
-		ctx.JSON(http.StatusInternalServerError, err)
+		return ctx.JSON(http.StatusInternalServerError, generated.ErrorResponse{
+			Message: err.Error(),
+		})
 	}
 
 	resp.Id = int(result.UserID)
@@ -143,13 +140,15 @@ func (s *Server) LoginUser(ctx echo.Context) error {
 				Message: "invalid phone number or password",
 			})
 		}
-		return ctx.JSON(http.StatusInternalServerError, err)
+		return ctx.JSON(http.StatusInternalServerError, generated.ErrorResponse{
+			Message: err.Error(),
+		})
 	}
 
 	val := s.Hash.CompareValue(result.Password, req.Password)
 	if !val {
 		return ctx.JSON(http.StatusBadRequest, generated.ErrorResponse{
-			Message: "invalid phone number or password",
+			Message: "invalid password",
 		})
 	}
 
@@ -161,33 +160,34 @@ func (s *Server) LoginUser(ctx echo.Context) error {
 	})
 
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, err)
+		return ctx.JSON(http.StatusInternalServerError, generated.ErrorResponse{
+			Message: err.Error(),
+		})
 	}
 
-	err = s.Repository.IncrementLoginCount(ctx.Request().Context(), int(result.UserID))
-	if err != nil {
-		fmt.Println(1)
-		return ctx.JSON(http.StatusInternalServerError, err)
-	}
+	s.Repository.IncrementLoginCount(ctx.Request().Context(), int(result.UserID))
 
 	return ctx.JSON(http.StatusOK, resp)
 }
 
 func (s *Server) GetMyProfile(ctx echo.Context) error {
 	// get user id from middleware
-	userID := ctx.Get("user_id").(int)
-	if userID <= 0 {
+	// prevent panic if user_id is not found
+	userID := ctx.Get("user_id")
+	if userID == nil || userID.(int) <= 0 {
 		return ctx.JSON(http.StatusForbidden, generated.ErrorResponse{
 			Message: "invalid token",
 		})
 	}
 
 	result, err := s.Repository.GetUser(ctx.Request().Context(), repository.GetUserInput{
-		UserID: userID,
+		UserID: userID.(int),
 	})
 
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, err)
+		return ctx.JSON(http.StatusInternalServerError, generated.ErrorResponse{
+			Message: err.Error(),
+		})
 	}
 
 	resp := generated.MyProfileResponse{
@@ -204,8 +204,8 @@ func (s *Server) UpdateMyProfile(ctx echo.Context) error {
 	ctx.Bind(&req)
 
 	// get user id from middleware
-	userID := ctx.Get("user_id").(int)
-	if userID <= 0 {
+	userID := ctx.Get("user_id")
+	if userID == nil || userID.(int) <= 0 {
 		return ctx.JSON(http.StatusForbidden, generated.ErrorResponse{
 			Message: "invalid token",
 		})
@@ -221,13 +221,15 @@ func (s *Server) UpdateMyProfile(ctx echo.Context) error {
 	if repoRequest.Password != "" {
 		hashPassword, err := s.Hash.HashValue(repoRequest.Password)
 		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, err)
+			return ctx.JSON(http.StatusInternalServerError, generated.ErrorResponse{
+				Message: err.Error(),
+			})
 		}
 		repoRequest.Password = string(hashPassword)
 	}
 
 	output, err := s.Repository.UpdateUser(ctx.Request().Context(), repository.UpdateUserInput{
-		UserID:      userID,
+		UserID:      userID.(int),
 		FullName:    repoRequest.FullName,
 		Password:    repoRequest.Password,
 		PhoneNumber: repoRequest.PhoneNumber,
@@ -239,7 +241,9 @@ func (s *Server) UpdateMyProfile(ctx echo.Context) error {
 				Message: "Phone number already registered",
 			})
 		}
-		return ctx.JSON(http.StatusInternalServerError, err)
+		return ctx.JSON(http.StatusInternalServerError, generated.ErrorResponse{
+			Message: err.Error(),
+		})
 	}
 
 	response := generated.MyProfileResponse{

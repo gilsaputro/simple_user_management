@@ -7,12 +7,14 @@ import (
 )
 
 func (r *Repository) RegisterUser(ctx context.Context, input RegisterUserInput) (output RegisterUserOutput, err error) {
+	// Begin transaction.
 	tx, err := r.Db.Begin()
 	if err != nil {
 		return RegisterUserOutput{}, err
 	}
 
 	defer func() {
+		// Rollback transaction if error.
 		if err != nil {
 			tx.Rollback()
 			return
@@ -21,14 +23,15 @@ func (r *Repository) RegisterUser(ctx context.Context, input RegisterUserInput) 
 
 	createdTime := time.Now().UTC()
 
-	// Menambahkan user baru.
+	// Insert user.
 	var userID int
 	err = tx.QueryRow("INSERT INTO users(phone_number, full_name, password, created_at) VALUES($1, $2, $3, $4) RETURNING id",
 		input.PhoneNumber, input.FullName, input.Password, createdTime).Scan(&userID)
 	if err != nil {
 		return RegisterUserOutput{}, err
 	}
-	// Commit transaksi jika semuanya berhasil.
+
+	// Commit Transaction if everything is ok.
 	err = tx.Commit()
 	if err != nil {
 		return RegisterUserOutput{}, err
@@ -40,7 +43,10 @@ func (r *Repository) RegisterUser(ctx context.Context, input RegisterUserInput) 
 }
 
 func (r *Repository) LoginUser(ctx context.Context, input LoginUserInput) (output LoginUserOutput, err error) {
+	// query user.
 	row := r.Db.QueryRow("SELECT id, phone_number, password FROM users WHERE phone_number = $1", input.PhoneNumber)
+
+	// scan result.
 	err = row.Scan(&output.UserID, &output.PhoneNumber, &output.Password)
 	if err != nil {
 		return LoginUserOutput{}, err
@@ -103,7 +109,7 @@ func (r *Repository) UpdateUser(ctx context.Context, input UpdateUserInput) (out
 		return UpdateUserOutput{}, err
 	}
 
-	// Commit transaksi jika semuanya berhasil.
+	// Commit transaction.
 	err = tx.Commit()
 	if err != nil {
 		return UpdateUserOutput{}, err
