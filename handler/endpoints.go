@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/SawitProRecruitment/UserService/generated"
+	"github.com/SawitProRecruitment/UserService/pkg/token"
 	"github.com/SawitProRecruitment/UserService/repository"
 	"github.com/labstack/echo/v4"
 )
@@ -149,6 +150,15 @@ func (s *Server) LoginUser(ctx echo.Context) error {
 	}
 
 	resp.Id = int(result.UserID)
+
+	// generate token
+	resp.Jwt, err = s.Token.GenerateToken(token.TokenBody{
+		UserID: int(result.UserID),
+	})
+
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, err)
+	}
 
 	return ctx.JSON(http.StatusOK, resp)
 }

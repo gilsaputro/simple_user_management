@@ -35,7 +35,7 @@ func (r *Repository) RegisterUser(ctx context.Context, input RegisterUserInput) 
 }
 
 func (r *Repository) LoginUser(ctx context.Context, input LoginUserInput) (output LoginUserOutput, err error) {
-	row := r.Db.QueryRow("SELECT id, phone_number, password FROM user WHERE phone_number = ?", input.PhoneNumber)
+	row := r.Db.QueryRow("SELECT id, phone_number, password FROM users WHERE phone_number = $1", input.PhoneNumber)
 
 	err = row.Scan(&output.UserID, &output.PhoneNumber, &output.Password)
 	if err != nil {
@@ -46,7 +46,7 @@ func (r *Repository) LoginUser(ctx context.Context, input LoginUserInput) (outpu
 }
 
 func (r *Repository) GetUser(ctx context.Context, input GetUserInput) (output GetUserOutput, err error) {
-	row := r.Db.QueryRow("SELECT id, phone_number, full_name FROM user WHERE id = ?", input.UserID)
+	row := r.Db.QueryRow("SELECT id, phone_number, full_name FROM users WHERE id = $1", input.UserID)
 
 	err = row.Scan(&output.UserID, &output.PhoneNumber, &output.FullName)
 	if err != nil {
@@ -71,9 +71,8 @@ func (r *Repository) UpdateUser(ctx context.Context, input UpdateUserInput) (out
 
 	// get user.
 	var userInfo UpdateUserOutput
-	row := tx.QueryRow("SELECT id, phone_number, full_name, password FROM user WHERE id = ?", input.UserID)
+	row := tx.QueryRow("SELECT id, phone_number, full_name, password FROM users WHERE id = $1", input.UserID)
 	err = row.Scan(&userInfo.UserID, &userInfo.PhoneNumber, &userInfo.FullName, &userInfo.Password)
-
 	if err != nil {
 		return UpdateUserOutput{}, err
 	}
@@ -94,7 +93,7 @@ func (r *Repository) UpdateUser(ctx context.Context, input UpdateUserInput) (out
 	}
 
 	// Update user.
-	_, err = tx.Exec("UPDATE user SET phone_number = ?, full_name = ?, password = ? WHERE id = ?", userInfo.PhoneNumber, userInfo.FullName, userInfo.Password, userInfo.UserID)
+	_, err = tx.Exec("UPDATE users SET phone_number = $1, full_name = $2, password = $3 WHERE id = $4", userInfo.PhoneNumber, userInfo.FullName, userInfo.Password, userInfo.UserID)
 	if err != nil {
 		return UpdateUserOutput{}, err
 	}
