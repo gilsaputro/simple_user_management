@@ -23,16 +23,14 @@ func (s *Server) RegisterUser(ctx echo.Context) error {
 		})
 	}
 
-	var hashPassword []byte
-	hashPassword, err = s.Hash.HashValue(req.Password)
+	hashPassword, err := s.Hash.HashValue(req.Password)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, generated.ErrorResponse{
 			Message: err.Error(),
 		})
 	}
 
-	var result repository.RegisterUserOutput
-	result, err = s.Repository.RegisterUser(ctx.Request().Context(), repository.RegisterUserInput{
+	result, err := s.Repository.RegisterUser(ctx.Request().Context(), repository.RegisterUserInput{
 		FullName:    req.FullName,
 		Password:    string(hashPassword),
 		PhoneNumber: req.PhoneNumber,
@@ -68,24 +66,28 @@ func validateRegisterRequest(req generated.RegisterRequest) error {
 		return fmt.Errorf("phone number is required")
 	}
 
-	// validate fullname length
-	if len(req.FullName) < 3 || len(req.FullName) > 60 {
-		return fmt.Errorf("full name length must be between 3 and 60 characters")
+	// validate phone number length
+	err := validatePhoneNumber(req.PhoneNumber)
+	if err != nil {
+		return err
+	}
+
+	// validate full name
+	err = validateFullName(req.FullName)
+	if err != nil {
+		return err
 	}
 
 	// validate password
-	if len(req.Password) < 6 || len(req.Password) > 64 {
+	err = validatePassword(req.Password)
+
+	return err
+}
+
+func validatePassword(password string) error {
+	// validate password
+	if len(password) < 6 || len(password) > 64 {
 		return fmt.Errorf("password length must be between 6 and 64 characters")
-	}
-
-	// validate phone number length
-	if len(req.PhoneNumber) < 10 || len(req.PhoneNumber) > 13 {
-		return fmt.Errorf("phone number length must be between 10 and 13 characters")
-	}
-
-	// validate phone number must start with +62
-	if !strings.HasPrefix(req.PhoneNumber, "+62") {
-		return fmt.Errorf("phone number must start with +62")
 	}
 
 	// validate password contains at least 1 uppercase, 1 lowercase, 1 number, and 1 symbol
@@ -95,7 +97,7 @@ func validateRegisterRequest(req generated.RegisterRequest) error {
 		hasNumber  bool
 		hasSpecial bool
 	)
-	for _, c := range req.Password {
+	for _, c := range password {
 		switch {
 		case c >= 'A' && c <= 'Z':
 			hasUpper = true
@@ -110,6 +112,27 @@ func validateRegisterRequest(req generated.RegisterRequest) error {
 
 	if !hasUpper || !hasLower || !hasNumber || !hasSpecial {
 		return fmt.Errorf("password must contain at least 1 uppercase, 1 lowercase, 1 number, and 1 symbol")
+	}
+	return nil
+}
+
+func validatePhoneNumber(phoneNumber string) error {
+	// validate phone number
+	if len(phoneNumber) < 10 || len(phoneNumber) > 13 {
+		return fmt.Errorf("phone number length must be between 10 and 13 characters")
+	}
+
+	// validate phone number must start with +62
+	if !strings.HasPrefix(phoneNumber, "+62") {
+		return fmt.Errorf("phone number must start with +62")
+	}
+	return nil
+}
+
+func validateFullName(fullName string) error {
+	// validate full name
+	if len(fullName) < 3 || len(fullName) > 60 {
+		return fmt.Errorf("full name length must be between 3 and 60 characters")
 	}
 	return nil
 }
@@ -172,16 +195,15 @@ func (s *Server) LoginUser(ctx echo.Context) error {
 
 func (s *Server) GetMyProfile(ctx echo.Context) error {
 	// get user id from middleware
-	// prevent panic if user_id is not found
-	userID := ctx.Get("user_id")
-	if userID == nil || userID.(int) <= 0 {
+	userID, err := getUserID(ctx)
+	if err != nil {
 		return ctx.JSON(http.StatusForbidden, generated.ErrorResponse{
-			Message: "invalid token",
+			Message: err.Error(),
 		})
 	}
 
 	result, err := s.Repository.GetUser(ctx.Request().Context(), repository.GetUserInput{
-		UserID: userID.(int),
+		UserID: userID,
 	})
 
 	if err != nil {
@@ -204,10 +226,10 @@ func (s *Server) UpdateMyProfile(ctx echo.Context) error {
 	ctx.Bind(&req)
 
 	// get user id from middleware
-	userID := ctx.Get("user_id")
-	if userID == nil || userID.(int) <= 0 {
+	userID, err := getUserID(ctx)
+	if err != nil {
 		return ctx.JSON(http.StatusForbidden, generated.ErrorResponse{
-			Message: "invalid token",
+			Message: err.Error(),
 		})
 	}
 
@@ -229,7 +251,7 @@ func (s *Server) UpdateMyProfile(ctx echo.Context) error {
 	}
 
 	output, err := s.Repository.UpdateUser(ctx.Request().Context(), repository.UpdateUserInput{
-		UserID:      userID.(int),
+		UserID:      userID,
 		FullName:    repoRequest.FullName,
 		Password:    repoRequest.Password,
 		PhoneNumber: repoRequest.PhoneNumber,
@@ -255,63 +277,38 @@ func (s *Server) UpdateMyProfile(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
+func getUserID(ctx echo.Context) (int, error) {
+	userID := ctx.Get("user_id")
+	if userID == nil || userID.(int) <= 0 {
+		return 0, fmt.Errorf("invalid token")
+	}
+	return userID.(int), nil
+}
+
 func validateUpdateRequest(req generated.UpdateMyProfileRequest) (repository.UpdateUserInput, error) {
 	var resp repository.UpdateUserInput
 	// validate request
 	if req.FullName != nil {
-		if len(*req.FullName) < 3 || len(*req.FullName) > 60 {
-			return repository.UpdateUserInput{}, fmt.Errorf("full name length must be between 3 and 60 characters")
+		err := validateFullName(*req.FullName)
+		if err != nil {
+			return repository.UpdateUserInput{}, err
 		}
 		resp.FullName = *req.FullName
 	}
 
 	if req.Password != nil {
-		if len(*req.Password) < 6 || len(*req.Password) > 64 {
-			return repository.UpdateUserInput{}, fmt.Errorf("password length must be between 6 and 64 characters")
+		err := validatePassword(*req.Password)
+		if err != nil {
+			return repository.UpdateUserInput{}, err
 		}
-
-		// validate password contains at least 1 uppercase, 1 lowercase, 1 number, and 1 symbol
-		var (
-			hasUpper   bool
-			hasLower   bool
-			hasNumber  bool
-			hasSpecial bool
-		)
-		for _, c := range *req.Password {
-			switch {
-			case c >= 'A' && c <= 'Z':
-				hasUpper = true
-			case c >= 'a' && c <= 'z':
-				hasLower = true
-			case c >= '0' && c <= '9':
-				hasNumber = true
-			case c == '!' || c == '@' || c == '#' || c == '$' || c == '%' || c == '^' || c == '&':
-				hasSpecial = true
-			}
-
-			if hasUpper && hasLower && hasNumber && hasSpecial {
-				break
-			}
-		}
-
-		if !hasUpper || !hasLower || !hasNumber || !hasSpecial {
-			return repository.UpdateUserInput{}, fmt.Errorf("password must contain at least 1 uppercase, 1 lowercase, 1 number, and 1 symbol")
-		}
-
 		resp.Password = *req.Password
 	}
 
 	if req.PhoneNumber != nil {
-		// validate phone number length
-		if len(*req.PhoneNumber) < 10 || len(*req.PhoneNumber) > 13 {
-			return repository.UpdateUserInput{}, fmt.Errorf("phone number length must be between 10 and 13 characters")
+		err := validatePhoneNumber(*req.PhoneNumber)
+		if err != nil {
+			return repository.UpdateUserInput{}, err
 		}
-
-		// validate phone number must start with +62
-		if !strings.HasPrefix(*req.PhoneNumber, "+62") {
-			return repository.UpdateUserInput{}, fmt.Errorf("phone number must start with +62")
-		}
-
 		resp.PhoneNumber = *req.PhoneNumber
 	}
 
