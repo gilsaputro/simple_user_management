@@ -1,13 +1,16 @@
 services:
-  # app:
-  #   build: .
-  #   ports:
-  #     - "8080:1323"
-  #   environment:
-  #     DATABASE_URL: postgres://postgres:postgres@db:5432/database?sslmode=disable
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
+  app:
+    build: .
+    ports:
+      - "8080:1323"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/database?sslmode=disable
+      HASH_COST: 10
+      PRIVATE_KEY_LOCATION: "/app/private_key.pem"
+      PUBLIC_KEY_LOCATION: "/app/public_key.pem"
+    depends_on:
+      db:
+        condition: service_healthy
   db:
     platform: linux/x86_64
     image: postgres:14.1-alpine
@@ -31,14 +34,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-  fake-gcs:
-      image: fsouza/fake-gcs-server
-      restart: always
-      ports:
-        - '4443:4443'
-      command: -public-host localhost:4443 -scheme http
-      volumes:
-        - ./schema/gcs:/data
 volumes:
   db:
     driver: local

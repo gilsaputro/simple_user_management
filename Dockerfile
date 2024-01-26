@@ -13,8 +13,14 @@ RUN GOPATH= go build -o /main cmd/main.go
 # This is the actual image that we will be using in production.
 FROM alpine:latest
 
+# create work directory
+WORKDIR /app
+
 # We need to copy the binary from the build image to the production image.
 COPY --from=Build /main .
+
+# copy the config file
+COPY config .
 
 # This is the port that our application will be listening on.
 EXPOSE 1323

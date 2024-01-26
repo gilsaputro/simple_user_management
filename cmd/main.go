@@ -61,8 +61,15 @@ func newServer() Server {
 
 	// Init Token
 	{
-		privateLocation := "./config/private_key.pem"
-		publicLocation := "./config/public_key.pem"
+		privateLocation := os.Getenv("PRIVATE_KEY_LOCATION")
+		if privateLocation == "" {
+			privateLocation = "./config/private_key.pem"
+		}
+
+		publicLocation := os.Getenv("PUBLIC_KEY_LOCATION")
+		if publicLocation == "" {
+			publicLocation = "./config/public_key.pem"
+		}
 		method, err := token.NewTokenMethod(
 			token.NewTokenConfig{
 				PrivateKeyLocation: privateLocation,
