@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/SawitProRecruitment/UserService/pkg/token"
-	"github.com/golang/mock/gomock"
 	"github.com/labstack/echo/v4"
+	"go.uber.org/mock/gomock"
 )
 
 func TestServer_MiddlewareLogger(t *testing.T) {

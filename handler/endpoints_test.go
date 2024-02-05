@@ -11,8 +11,8 @@ import (
 	"github.com/SawitProRecruitment/UserService/pkg/hash"
 	"github.com/SawitProRecruitment/UserService/pkg/token"
 	"github.com/SawitProRecruitment/UserService/repository"
-	"github.com/golang/mock/gomock"
 	"github.com/labstack/echo/v4"
+	"go.uber.org/mock/gomock"
 )
 
 func TestServer_RegisterUser(t *testing.T) {

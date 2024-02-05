@@ -5,10 +5,10 @@ go 1.19
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/getkin/kin-openapi v0.118.0
-	github.com/golang/mock v1.6.0
 	github.com/labstack/echo/v4 v4.11.4
 	github.com/labstack/gommon v0.4.2
 	github.com/lib/pq v1.10.9
+	go.uber.org/mock v0.4.0
 	golang.org/x/crypto v0.17.0
 	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0
 )
